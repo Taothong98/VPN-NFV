@@ -71,6 +71,11 @@ services:
     build:
       context: .
       dockerfile: dev-client/Dockerfile  
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE      
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1            
     container_name: client
     ports:
       - "8083:80"
@@ -79,6 +84,8 @@ services:
         ipv4_address: 172.16.100.20
     volumes:
       - ./wireguard-profile:/etc/wireguard 
+      - /lib/modules:/lib/modules
+
 
 
 # docker exec -it client bash
@@ -88,6 +95,31 @@ services:
 
 
 # ---------------------------------------------------------------------------------
+
+  # wireguard-client:
+  #   build:
+  #     context: .
+  #     dockerfile: dev-WG-Client/Dockerfile    
+  #   # image: linuxserver/wireguard:1.0.20210914
+  #   container_name: wireguard-client
+  #   cap_add:
+  #     - NET_ADMIN
+  #     - SYS_MODULE
+  #   environment:
+  #     - PUID=1000
+  #     - PGID=1000
+  #     - TZ=Europe/Rome
+  #   volumes:
+  #     - ./config/opt/wireguard-server/config:/config
+  #     - /lib/modules:/lib/modules
+  #   sysctls:
+  #     - net.ipv4.conf.all.src_valid_mark=1
+  #   restart: unless-stopped
+  #   networks:
+  #     vpn-net:
+  #       ipv4_address: 172.16.100.20    
+
+# -----------------------------------------------------------------------------------
 networks:
   vpn-net:
     driver: bridge

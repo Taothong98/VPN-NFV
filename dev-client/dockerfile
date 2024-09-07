@@ -19,7 +19,7 @@ ENV TZ=Asia/Bangkok
 
 
 RUN apt install wireguard -y
-
+RUN apt install iproute2 -y
 EXPOSE 80
 # CMD [ "apache2ctl","-D","FOREGROUND" ]
 CMD ["/bin/bash","-c","/start.sh"]

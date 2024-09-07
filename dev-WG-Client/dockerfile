@@ -1,0 +1,16 @@
+FROM linuxserver/wireguard:1.0.20210914
+
+RUN apk update
+RUN apk add net-tools
+RUN apk add iputils-ping 
+# RUN apk add iperf3 
+
+ENV TZ=Asia/Bangkok
+
+
+
+
+
+
+
+
