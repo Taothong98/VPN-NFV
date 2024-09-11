@@ -1,32 +1,54 @@
 version: '3'
 services:
-
-
-  wg-easy:
+  iperfclient:
     build:
       context: .
-      dockerfile: dev-wg/Dockerfile  
+      dockerfile: dev-IperfClient/Dockerfile   
+    # image: felixfischer/wireguard:latest
+    container_name: IperfClient
+    volumes:
+      - ./dev-IperfClient/etc/wireguard:/etc/wireguard  # ใช้ $(pwd) ใน docker-compose ให้ใช้ relative path
+      - ./iperf.log:/iperf.log
+    ports:
+      - "55555:38945/udp"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    tty: true
+    stdin_open: true  # เทียบเท่ากับ --interactive
+    networks:
+      vpn-net:
+        ipv4_address: 172.16.100.20      
+      # vpn-net2:
+      #   ipv4_address: 172.16.200.20          
+
+# docker exec -it IperfClient bash
+###################################################
+
+  vpnserver:
+    build:
+      context: .
+      dockerfile: dev-VPNserver/Dockerfile   
     deploy:
       resources:
         limits:
-          cpus: '${CPU_limits}'       # กำหนดการใช้ CPU
+          cpus: '${CPU_limits}'       # กำหนดการใช้ CPU         
           memory: '${RAM_limits}'     # กำหนดการใช้ RAM (เช่น 512 MB)
         # reservations:
-        #   memory: '256M'     # กำหนด RAM ที่ container ควรจะมีอย่างน้อย (256 MB)
+          # cpus: '1'        
+          # memory: '128M'     # กำหนด RAM ที่ container ควรจะมีอย่างน้อย (256 MB)   
+    cpuset: '1'
     # image: weejewel/wg-easy
-    container_name: WG-GUI
-    # restart: unless-stopped
+    container_name: VPNserver
+    restart: unless-stopped
+    # ports:
+    #   - "51001:51820/udp"
+    #   - "51001:51821/tcp"
     ports:
-      - "51000:51820/udp"
-      - "51000:51821/tcp"
+      - "60000:51820/udp"
+      - "60000:51821/tcp"    
     volumes:
       - ~/.wg-easy:/etc/wireguard
-      - ./var-wg:/var
-      - ./performance.py:/home/performance.py
-      # - ./wireguard-profile:/etc/wireguard
-      
-
-
     environment:
       # - WG_HOST=localhost
       - WG_HOST=172.16.100.10
@@ -44,103 +66,61 @@ services:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv4.ip_forward=1
     networks:    
-      nat-server:
-        ipv4_address: 192.168.100.254    
       vpn-net:
-        ipv4_address: 172.16.100.10            
+        ipv4_address: 172.16.100.10              
+      nat-server:
+        ipv4_address: 192.168.100.254
    
-# docker exec -it WG-GUI bash
+# docker exec -it VPNserver bash
+#######################################################
 
-  iperf-server:
+  iperfserver:
     build:
       context: .
-      dockerfile: dev-iperf/Dockerfile  
-    container_name: iperf-server
+      dockerfile: dev-IperfServer/Dockerfile  
+    container_name: IperfServer
     ports:
       - "8082:80"
       - "5201:5201"
     networks:      
       nat-server:
         ipv4_address: 192.168.100.100   
-# docker exec -it iperf-server bash
+
+# docker exec -it IperfServer bash
 # iperf3 -c localhost -t 10
 
-# -------------------------------------------------------------------------------
 
-  client:
-    build:
-      context: .
-      dockerfile: dev-client/Dockerfile  
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE      
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1            
-    container_name: client
-    ports:
-      - "8083:80"
-    networks:
-      vpn-net:
-        ipv4_address: 172.16.100.20
-    volumes:
-      - ./wireguard-profile:/etc/wireguard 
-      - /lib/modules:/lib/modules
-
-
-
-# docker exec -it client bash
-
-# การเปิดใช้งานเมื่อบูทเครื่อง
-# sudo systemctl enable wg-quick@wg0
-
-
-# ---------------------------------------------------------------------------------
-
-  # wireguard-client:
-  #   build:
-  #     context: .
-  #     dockerfile: dev-WG-Client/Dockerfile    
-  #   # image: linuxserver/wireguard:1.0.20210914
-  #   container_name: wireguard-client
-  #   cap_add:
-  #     - NET_ADMIN
-  #     - SYS_MODULE
-  #   environment:
-  #     - PUID=1000
-  #     - PGID=1000
-  #     - TZ=Europe/Rome
-  #   volumes:
-  #     - ./config/opt/wireguard-server/config:/config
-  #     - /lib/modules:/lib/modules
-  #   sysctls:
-  #     - net.ipv4.conf.all.src_valid_mark=1
-  #   restart: unless-stopped
-  #   networks:
-  #     vpn-net:
-  #       ipv4_address: 172.16.100.20    
-
-# -----------------------------------------------------------------------------------
 networks:
   vpn-net:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.16.100.0/24      
-        
+        - subnet: 172.16.100.0/24
+  # vpn-net2:
+  #   driver: bridge
+  #   ipam:
+  #     config:
+  #       - subnet: 172.16.200.0/24              
+
   nat-server:
     driver: bridge
     ipam:
       config:
-        - subnet: 192.168.100.0/24
-
-  # nat-client:
+        - subnet: 192.168.100.0/24        
+  # nat-server2:
   #   driver: bridge
   #   ipam:
   #     config:
-  #       - subnet: 10.0.0.0/24        
+  #       - subnet: 192.168.200.0/24            
 
 
+  # macvlan_net:
+  #   driver: macvlan
+  #   driver_opts:
+  #     parent: eth0  # ชื่อของอินเทอร์เฟซเครือข่ายจริงที่ต้องการใช้งาน
+  #   ipam:
+  #     config:
+  #       - subnet: 192.168.1.0/24
+  #         gateway: 192.168.1.1
 # docker-compose up -d
-
-
 

@@ -5,7 +5,7 @@ RUN apt install iputils-ping -y
 RUN apt install iperf3 -y
 
 
-COPY dev-iperf/start.sh /
+COPY dev-IperfServer/start.sh /
 RUN chmod +x /start.sh
 # # for cpu data
 # RUN apt-get install sysstat -y

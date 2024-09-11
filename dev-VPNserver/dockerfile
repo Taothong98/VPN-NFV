@@ -1,0 +1,36 @@
+FROM weejewel/wg-easy:latest
+RUN apk update
+RUN apk add python3
+RUN apk add py3-pip
+RUN apk add htop
+
+# for cpu data
+RUN apk add sysstat 
+# mpstat -P
+# for ram data 
+RUN apk add procps  
+# free -h 
+
+# RUN python3 --version && pip3 --version
+
+RUN ln -sf python3 /usr/bin/python
+
+# RUN mkdir /home/vpn
+
+# COPY dev-wg/performance.py /home
+# RUN chmod +x /home/performance.py
+
+ENV TZ=Asia/Bangkok
+
+# RUN ifconfig eth1 mtu 65535
+# RUN ifconfig eth0 mtu 65535
+
+
+
+
+
+
+
+
+
+
