@@ -8,7 +8,7 @@ services:
     container_name: IperfClient
     volumes:
       - ./dev-IperfClient/etc/wireguard:/etc/wireguard  # ใช้ $(pwd) ใน docker-compose ให้ใช้ relative path
-      - ./iperf.log:/iperf.log
+      - ./iperf.log:/home/iperf/iperf.log
     ports:
       - "55555:38945/udp"
     cap_add:

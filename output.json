@@ -1,0 +1,7 @@
+{
+    "iperf": {
+        "error": "/bin/sh: 1: cannot create /iperf.log: Permission denied\n"
+    },
+    "memory": 19.08,
+    "cpu": 0.0
+}
