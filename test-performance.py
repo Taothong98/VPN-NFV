@@ -2,18 +2,25 @@ import subprocess
 import threading
 import json
 
-# ตัวแปร ip_address ที่อยู่ภายนอกฟังก์ชัน
+# =================== input for iperf test =================
 ip_address = "192.168.100.100"
 time_test = "1"
 bandwidth = "1Gb"
 parallel = "1"
-buffer = "8KB"
+buffer = "non"
+
+# ====================== link_capacity =================
+
+link_capacity = "800kbps"
 
 # ฟังก์ชัน main ที่เรียกใช้ฟังก์ชันอื่นๆ
 def main():
     results = {}
 
     # ฟังก์ชันที่ทำงานร่วมกับ threads เพื่อเก็บผลลัพธ์
+    def run_input():
+        results["input"] = input()
+            
     def run_iperf():
         results["iperf"] = iperf()
 
@@ -24,16 +31,20 @@ def main():
         results["memory"] = get_memory_usage()
 
     # สร้าง threads สำหรับ iperf, getcpu, และ get_memory_usage
+    
+    input_thread = threading.Thread(target=run_input)
     iperf_thread = threading.Thread(target=run_iperf)
     getcpu_thread = threading.Thread(target=run_getcpu)
     getmem_thread = threading.Thread(target=run_getmem)
 
     # เรียกใช้ทั้งสามฟังก์ชันพร้อมกัน
+    input_thread.start()
     iperf_thread.start()
     getcpu_thread.start()
     getmem_thread.start()
 
     # รอให้ทั้งสามฟังก์ชันเสร็จสิ้นการทำงาน
+    input_thread.join()
     iperf_thread.join()
     getcpu_thread.join()
     getmem_thread.join()
@@ -42,16 +53,40 @@ def main():
     with open('output.json', 'w') as json_file:
         json.dump(results, json_file, indent=4)
 
-    print("Results saved to output.json")    
+    print("Results saved to output.json")
+    
+def get_shell_output(command):
+    # รันคำสั่ง shell และดึงผลลัพธ์กลับมา
+    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return result.stdout.strip()    
 
 def input():
-    # สร้างคำสั่งโดยใช้ f-string
-    command = f"docker exec IperfClient iperf3 -c {ip_address} -u -t {time_test} -b {bandwidth} -P {parallel} > iperf.log"
+
+    ip_address = get_shell_output("sed -n '6p' ./test-performance.py | awk -F ' = ' '{print $2}' | sed 's/\"//g'")
+    time_test = get_shell_output("sed -n '7p' ./test-performance.py | awk -F ' = ' '{print $2}' | sed 's/\"//g'")
+    bandwidth = get_shell_output("sed -n '8p' ./test-performance.py | awk -F ' = ' '{print $2}' | sed 's/\"//g'")
+    parallel = get_shell_output("sed -n '9p' ./test-performance.py | awk -F ' = ' '{print $2}' | sed 's/\"//g'")
+    buffer = get_shell_output("sed -n '10p' ./test-performance.py | awk -F ' = ' '{print $2}' | sed 's/\"//g'")
+
+    return {
+        # "ip_address": ip_address,
+        "time_test": time_test,
+        "bandwidth": bandwidth,
+        "parallel": parallel,
+        # "buffer": buffer
+    }
+
+def set_link_capacity():
+    
+    command1 = "docker exec VPNserver tc qdisc add dev eth0 root handle 1:0 htb default 10"
+    command2 = "docker exec VPNserver tc class add dev eth0 parent 1:0 classid 1:10 htb rate {link_capacity} prio 0"
+    command3 = "docker exec VPNserver iptables -A OUTPUT -t mangle -p udp -j MARK --set-mark 10"
+    command4 = "docker exec VPNserver tc filter add dev eth0 parent 1:0 prio 0 protocol ip handle 10 fw flowid 1:10"
     
 # ฟังก์ชัน iperf ใช้ตัวแปร ip_address จากภายนอก
 def iperf():
     # คำสั่งหลักสำหรับ iperf
-    command = f"docker exec IperfClient iperf3 -c {ip_address} -u -t {time_test} -b {bandwidth} -P {parallel} > /home/iperf/iperf.log"
+    command = f"docker exec IperfClient iperf3 -c {ip_address} -u -t {time_test} -b {bandwidth} -P {parallel} > iperf.log"
     
     # รันคำสั่ง iperf และรอให้เสร็จสิ้น
     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

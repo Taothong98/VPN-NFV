@@ -18,7 +18,9 @@ FROM felixfischer/wireguard:latest
 RUN apk update
 RUN apk add iproute2 
 RUN apk add iperf3
+RUN touch /iperf.log
 ENV TZ=Asia/Bangkok
+
 # RUN ifconfig wg0 mtu 65536  
 # RUN ifconfig eth0 mtu 65536
 

@@ -1,7 +1,21 @@
 {
-    "iperf": {
-        "error": "/bin/sh: 1: cannot create /iperf.log: Permission denied\n"
+    "input": {
+        "time_test": "1",
+        "bandwidth": "1Gb",
+        "parallel": "1"
     },
-    "memory": 19.08,
-    "cpu": 0.0
+    "cpu": 39.23,
+    "memory": 19.51,
+    "iperf": {
+        "senderInterval": "0.00-1.00",
+        "receiverInterval": "0.00-1.00",
+        "senderTransfer": "84.1",
+        "receiverTransfer": "84.1",
+        "senderBitrate": "706",
+        "receiverBitrate": "705",
+        "senderJitter": "0.000",
+        "receiverJitter": "0.017",
+        "senderLostTotal": "0/64492",
+        "receiverLostTotal": "3/64492"
+    }
 }
