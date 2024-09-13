@@ -3,6 +3,8 @@ import threading
 import json
 import os
 import argparse
+import re
+
 
 
 # =================== input for iperf test =================
@@ -27,18 +29,27 @@ def main():
     bandwidth = args.bandwidth
     parallel = args.parallel
     buffer_size = args.buffer
+    link_capacity = args.link_capacity
         
     docker_start()  # ต้องให้ docker_start() ทำงานเสร็จก่อน
     results = {}
     
+    if link_capacity:
+        print(f"Setting link capacity to {link_capacity}")
+        set_link_capacity(link_capacity)    
+    
     # เพิ่มเฉพาะค่าที่ต้องการบันทึกลงใน JSON
     results["arguments"] = {
-        "ip_address": ip_address,
+        # "ip_address": ip_address,
         "time_test": time_test,
-        "bandwidth": bandwidth
-        # "parallel": parallel,  # ค่านี้ไม่ต้องการบันทึกไว้ใน JSON
-        # "buffer_size": buffer_size  # ค่านี้ไม่ต้องการบันทึกไว้ใน JSON
+        "bandwidth": bandwidth,
+        "parallel": parallel,  # ค่านี้ไม่ต้องการบันทึกไว้ใน JSON
+        # "buffer_size": buffer_size,  # ค่านี้ไม่ต้องการบันทึกไว้ใน JSON
+        
+        "link_capacity": link_capacity,  # ค่านี้ไม่ต้องการบันทึกไว้ใน JSON
+        
     }
+        
     
     # ฟังก์ชันที่ทำงานร่วมกับ threads เพื่อเก็บผลลัพธ์
             
@@ -69,11 +80,29 @@ def main():
     getcpu_thread.join()
     getmem_thread.join()
 
-    # บันทึกผลลัพธ์ลงไฟล์ JSON
-    with open('output.json', 'w') as json_file:
+    # บันทึกผลลัพธ์ลงไฟล์ JSON (ไฟล์แรก)
+    # with open('output_latest.json', 'w') as json_file:
+    #     json.dump(results, json_file, indent=4)
+
+    # # บันทึกผลลัพธ์ลงไฟล์ JSON (ไฟล์ที่สอง - เขียนต่อท้ายข้อมูลเก่า)
+    # append_to_json('output_history.json', results)
+
+    # print("Results saved to output_latest.json and output_history.json")
+    
+ 
+    #================ เรียกฟังก์ชัน ping() และบันทึกผลลัพธ์ลง JSON ======================
+    results["ping"] = ping(ip_address)
+
+    # บันทึกผลลัพธ์รวมถึง ping ลงใน JSON อีกครั้ง
+    with open('output_latest.json', 'w') as json_file:
         json.dump(results, json_file, indent=4)
 
-    print("Results saved to output.json")
+    print("Results including ping saved to output_latest_with_ping.json")
+    
+    append_to_json('output_history.json', results)
+
+    print("Results saved to output_latest.json and output_history.json")    
+       
     
 # ฟังก์ชัน parse_args เพื่อรับค่าจาก command-line arguments
 def parse_args():
@@ -87,7 +116,8 @@ def parse_args():
     parser.add_argument('-bf', '--buffer', type=str, default="8KB", help='Buffer size for iperf')
     
     # ====================== link_capacity =================
-    parser.add_argument('-lc', '--link_capacity', type=str, default="10240kbps", help='link_capacity of VPN-Server')
+    # parser.add_argument('-lc', '--link_capacity', type=str, default="1024Mbit", help='link_capacity of VPN-Server')
+    parser.add_argument('-lc', '--link_capacity', type=str, help='link_capacity of VPN-Server')
     
     return parser.parse_args()   
     
@@ -97,12 +127,47 @@ def get_shell_output(command):
     return result.stdout.strip()    
 
 
-def set_link_capacity():
-    
-    command1 = "docker exec VPNserver tc qdisc add dev eth0 root handle 1:0 htb default 10"
-    command2 = "docker exec VPNserver tc class add dev eth0 parent 1:0 classid 1:10 htb rate {link_capacity} prio 0"
-    command3 = "docker exec VPNserver iptables -A OUTPUT -t mangle -p udp -j MARK --set-mark 10"
-    command4 = "docker exec VPNserver tc filter add dev eth0 parent 1:0 prio 0 protocol ip handle 10 fw flowid 1:10"
+def set_link_capacity(link_capacity):
+    try:
+        # รันคำสั่งผ่าน subprocess และดึงค่า output
+        result = subprocess.run(["docker", "exec", "VPNserver", "tc", "class", "show", "dev", "wg0"], 
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        show = result.stdout  # เก็บผลลัพธ์ของคำสั่ง
+
+        # ตรวจสอบว่าค่า show มีข้อมูลหรือไม่
+        if not show:
+            print("tc can't not set")
+        else:
+            # ดึงค่าที่อยู่หลังคำว่า 'rate' ออกมา (ในที่นี้คือ 30Mbit)
+            show_parts = show.split()
+            if 'rate' in show_parts:
+                show_rate_index = show_parts.index('rate') + 1  # หา index ที่คำว่า 'rate' แล้วบวก 1 เพื่อเอาค่าหลัง 'rate'
+                show_rate = show_parts[show_rate_index]  # ดึงค่าหลัง 'rate' (เช่น 30Mbit)
+                
+                # เปรียบเทียบกับค่า lc ที่ส่งเข้ามา
+                if show_rate != link_capacity:
+                    print(f"lc not same, auto change rate to {link_capacity}")
+                    # เปลี่ยนค่า rate โดยใช้คำสั่ง docker exec
+                    change_result = subprocess.run(
+                        ["docker", "exec", "VPNserver", "tc", "class", "change", "dev", "wg0", 
+                         "classid", "1:10", "htb", "rate", link_capacity],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    )
+
+                    # ตรวจสอบผลลัพธ์หลังจากเปลี่ยนค่า
+                    if change_result.returncode == 0:
+                        print("Auto change success, Check again..")
+                        # ตรวจสอบอีกครั้งหลังจากเปลี่ยนค่า
+                        set_link_capacity(link_capacity)
+                    else:
+                        print(f"can't change lc: {change_result.stderr}")
+                else:
+                    print("lc is same, you can test it ")
+            else:
+                print("nodata")  # ถ้าไม่มีคำว่า 'rate' ในผลลัพธ์
+    except Exception as e:
+        print(f"Error lc function: {e}")
+        
     
 def docker_start():
     # หา path ปัจจุบันที่ไฟล์ Python และ docker-compose.yml อยู่
@@ -112,7 +177,6 @@ def docker_start():
     command = f"docker-compose -f {current_path}/docker-compose.yml ps -a"
     
     restart_docker = f"docker-compose -f {current_path}/docker-compose.yml restart"
-    up_docker = f"docker-compose -f {current_path}/docker-compose.yml up -d"
     
     # รัน command ที่สร้างขึ้น
     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -127,14 +191,13 @@ def docker_start():
         # ตรวจสอบว่ามี service หรือไม่
         if len(lines) <= 2:  # มีเพียง header แต่ไม่มี service
             print("Not have service in compose")
-            result = subprocess.run(up_docker, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            print("auto docker-compose up")
-                        
+            result = subprocess.run(restart_docker, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            
         else:
             # ตรวจสอบแต่ละบรรทัดที่มีข้อมูล service
             all_up = True
             for line in lines[2:]:  # ข้ามสองบรรทัดแรกที่เป็น header
-                if "Up" not in line:  # ถ้า service ไหนไม่ขึ้นว่า Up
+                if "Up" not in line or "Exited" in line:  # ถ้า service ไหนไม่ขึ้นว่า Up หรือขึ้นว่า Exited
                     all_up = False
                     break
 
@@ -143,7 +206,7 @@ def docker_start():
             else:
                 print("Some services are not running normally!")
                 result = subprocess.run(restart_docker, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                print("auto docker-compose restart")
+                print("Services restarted.")
             
     else:
         print("Error executing command:\n", result.stderr)
@@ -190,17 +253,37 @@ def iperf(ip_address, time_test, bandwidth, parallel):
     
     # จัดเก็บผลลัพธ์ใน dictionary เพื่อบันทึกลง JSON
     return {
-        "senderInterval": result1.stdout.strip(),
-        "receiverInterval": result2.stdout.strip(),
-        "senderTransfer": result3.stdout.strip(),
-        "receiverTransfer": result4.stdout.strip(),
-        "senderBitrate": result5.stdout.strip(),
-        "receiverBitrate": result6.stdout.strip(),
-        "senderJitter": result7.stdout.strip(),
-        "receiverJitter": result8.stdout.strip(),
-        "senderLostTotal": result9.stdout.strip(),
-        "receiverLostTotal": result10.stdout.strip()
+        # "senderInterval": f"{result1.stdout.strip()} seconds",    # เพิ่มหน่วยเป็น "seconds"
+        # "receiverInterval": f"{result2.stdout.strip()} seconds",  # เพิ่มหน่วยเป็น "seconds"
+        "senderTransfer": f"{result3.stdout.strip()} MB",          # เพิ่มหน่วยเป็น "MB"
+        "receiverTransfer": f"{result4.stdout.strip()} MB",        # เพิ่มหน่วยเป็น "MB"
+        "senderBitrate": f"{result5.stdout.strip()} Mbps",         # เพิ่มหน่วยเป็น "Mbps"
+        "receiverBitrate": f"{result6.stdout.strip()} Mbps",       # เพิ่มหน่วยเป็น "Mbps"
+        "senderJitter": f"{result7.stdout.strip()} ms",            # เพิ่มหน่วยเป็น "ms"
+        "receiverJitter": f"{result8.stdout.strip()} ms",          # เพิ่มหน่วยเป็น "ms"
+        "senderLostTotal": f"{result9.stdout.strip()} packets",    # เพิ่มหน่วยเป็น "packets"
+        "receiverLostTotal": f"{result10.stdout.strip()} packets"  # เพิ่มหน่วยเป็น "packets"
     }
+    
+    
+# ฟังก์ชันสำหรับเขียนข้อมูลต่อท้ายในไฟล์ JSON
+def append_to_json(filename, new_data):
+    if os.path.exists(filename):
+        # ถ้าไฟล์มีอยู่แล้ว ให้อ่านข้อมูลเก่าเข้ามาก่อน
+        with open(filename, 'r') as json_file:
+            try:
+                data = json.load(json_file)
+            except json.JSONDecodeError:
+                data = []  # ถ้าไฟล์ว่าง ให้เริ่มเป็นลิสต์ว่าง
+    else:
+        data = []  # ถ้าไฟล์ไม่มีอยู่ ให้เริ่มเป็นลิสต์ว่าง
+
+    # เพิ่มข้อมูลใหม่ลงในลิสต์
+    data.append(new_data)
+
+    # เขียนข้อมูลใหม่กลับลงไฟล์
+    with open(filename, 'w') as json_file:
+        json.dump(data, json_file, indent=4)    
     
 # ฟังก์ชัน getcpu ใช้ mpstat เพื่อเก็บค่า CPU usage
 def getcpu(time_test,):
@@ -234,6 +317,29 @@ def get_memory_usage(time_test,):
 
     # คืนค่าผลลัพธ์ RAM ที่ถูกใช้
     return avg_ram_usage
+
+
+def ping(ip_address):
+    command = f"docker exec IperfClient ping {ip_address} -c 5"
+
+    # รันคำสั่ง ping
+    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # แปลงผลลัพธ์เป็น string
+    output = result.stdout.decode('utf-8')
+
+    # ใช้ regular expression เพื่อดึงค่า max round-trip time
+    match = re.search(r"min/avg/max = (\d+\.\d+)/(\d+\.\d+)/(\d+\.\d+)", output)
+
+    if match:
+        min_val, avg_val, max_val = match.groups()
+        print(f"Max round-trip time: {max_val} ms")
+        # return {"min": min_val, "avg": avg_val, "max": max_val}
+        return {"max": max_val}
+    
+    else:
+        print("ไม่พบข้อมูล round-trip min/avg/max")
+        return {"error": "ไม่พบข้อมูล ping"}
 
 
 # เรียกใช้ฟังก์ชัน main เมื่อสคริปต์ถูกเรียกใช้โดยตรง
