@@ -4,18 +4,18 @@
         "time_test": "1",
         "bandwidth": "1Gb"
     },
-    "cpu": 37.9,
-    "memory": 19.06,
+    "cpu": 39.06,
+    "memory": 19.01,
     "iperf": {
         "senderInterval": "0.00-1.00",
         "receiverInterval": "0.00-1.00",
-        "senderTransfer": "106",
+        "senderTransfer": "108",
         "receiverTransfer": "105",
-        "senderBitrate": "890",
-        "receiverBitrate": "879",
+        "senderBitrate": "902",
+        "receiverBitrate": "878",
         "senderJitter": "0.000",
-        "receiverJitter": "0.013",
-        "senderLostTotal": "0/81365",
-        "receiverLostTotal": "981/81365"
+        "receiverJitter": "0.010",
+        "senderLostTotal": "0/82447",
+        "receiverLostTotal": "2199/82447"
     }
 }
