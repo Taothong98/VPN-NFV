@@ -1,13 +1,16 @@
 import subprocess
 import threading
 import json
+import os
+import argparse
+
 
 # =================== input for iperf test =================
-ip_address = "192.168.100.100"
-time_test = "1"
-bandwidth = "1Gb"
-parallel = "1"
-buffer = "non"
+# ip_address = "192.168.100.100"
+# time_test = "1"
+# bandwidth = "1Gb"
+# parallel = "1"
+# buffer = "non"
 
 # ====================== link_capacity =================
 
@@ -15,36 +18,53 @@ link_capacity = "800kbps"
 
 # ฟังก์ชัน main ที่เรียกใช้ฟังก์ชันอื่นๆ
 def main():
-    results = {}
 
+    args = parse_args()       # รับค่าจาก command-line arguments
+
+    # ตั้งค่า variables ที่เปลี่ยนแปลงได้
+    ip_address = args.ip_address
+    time_test = args.time_test
+    bandwidth = args.bandwidth
+    parallel = args.parallel
+    buffer_size = args.buffer
+        
+    docker_start()  # ต้องให้ docker_start() ทำงานเสร็จก่อน
+    results = {}
+    
+    # เพิ่มเฉพาะค่าที่ต้องการบันทึกลงใน JSON
+    results["arguments"] = {
+        "ip_address": ip_address,
+        "time_test": time_test,
+        "bandwidth": bandwidth
+        # "parallel": parallel,  # ค่านี้ไม่ต้องการบันทึกไว้ใน JSON
+        # "buffer_size": buffer_size  # ค่านี้ไม่ต้องการบันทึกไว้ใน JSON
+    }
+    
     # ฟังก์ชันที่ทำงานร่วมกับ threads เพื่อเก็บผลลัพธ์
-    def run_input():
-        results["input"] = input()
             
     def run_iperf():
-        results["iperf"] = iperf()
+        results["iperf"] = iperf(ip_address, time_test, bandwidth, parallel)  # ส่งค่าพารามิเตอร์ไปให้ iperf()
 
     def run_getcpu():
-        results["cpu"] = getcpu()
+        results["cpu"] = getcpu(time_test,)
 
     def run_getmem():
-        results["memory"] = get_memory_usage()
+        results["memory"] = get_memory_usage(time_test,)
 
     # สร้าง threads สำหรับ iperf, getcpu, และ get_memory_usage
     
-    input_thread = threading.Thread(target=run_input)
     iperf_thread = threading.Thread(target=run_iperf)
     getcpu_thread = threading.Thread(target=run_getcpu)
     getmem_thread = threading.Thread(target=run_getmem)
 
     # เรียกใช้ทั้งสามฟังก์ชันพร้อมกัน
-    input_thread.start()
+
     iperf_thread.start()
     getcpu_thread.start()
     getmem_thread.start()
 
     # รอให้ทั้งสามฟังก์ชันเสร็จสิ้นการทำงาน
-    input_thread.join()
+
     iperf_thread.join()
     getcpu_thread.join()
     getmem_thread.join()
@@ -55,26 +75,27 @@ def main():
 
     print("Results saved to output.json")
     
+# ฟังก์ชัน parse_args เพื่อรับค่าจาก command-line arguments
+def parse_args():
+    parser = argparse.ArgumentParser(description="Test performance script")
+    
+    # =================== input for iperf test =================
+    parser.add_argument('-ip', '--ip_address', type=str, default="192.168.100.100", help='IP address to test')
+    parser.add_argument('-t', '--time_test', type=str, default="1", help='Test duration in seconds')
+    parser.add_argument('-b', '--bandwidth', type=str, default="1Gb", help='Bandwidth for iperf')
+    parser.add_argument('-p', '--parallel', type=str, default="1", help='Number of parallel streams for iperf')
+    parser.add_argument('-bf', '--buffer', type=str, default="8KB", help='Buffer size for iperf')
+    
+    # ====================== link_capacity =================
+    parser.add_argument('-lc', '--link_capacity', type=str, default="10240kbps", help='link_capacity of VPN-Server')
+    
+    return parser.parse_args()   
+    
 def get_shell_output(command):
     # รันคำสั่ง shell และดึงผลลัพธ์กลับมา
     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     return result.stdout.strip()    
 
-def input():
-
-    ip_address = get_shell_output("sed -n '6p' ./test-performance.py | awk -F ' = ' '{print $2}' | sed 's/\"//g'")
-    time_test = get_shell_output("sed -n '7p' ./test-performance.py | awk -F ' = ' '{print $2}' | sed 's/\"//g'")
-    bandwidth = get_shell_output("sed -n '8p' ./test-performance.py | awk -F ' = ' '{print $2}' | sed 's/\"//g'")
-    parallel = get_shell_output("sed -n '9p' ./test-performance.py | awk -F ' = ' '{print $2}' | sed 's/\"//g'")
-    buffer = get_shell_output("sed -n '10p' ./test-performance.py | awk -F ' = ' '{print $2}' | sed 's/\"//g'")
-
-    return {
-        # "ip_address": ip_address,
-        "time_test": time_test,
-        "bandwidth": bandwidth,
-        "parallel": parallel,
-        # "buffer": buffer
-    }
 
 def set_link_capacity():
     
@@ -83,8 +104,44 @@ def set_link_capacity():
     command3 = "docker exec VPNserver iptables -A OUTPUT -t mangle -p udp -j MARK --set-mark 10"
     command4 = "docker exec VPNserver tc filter add dev eth0 parent 1:0 prio 0 protocol ip handle 10 fw flowid 1:10"
     
+def docker_start():
+    # หา path ปัจจุบันที่ไฟล์ Python และ docker-compose.yml อยู่
+    current_path = os.getcwd()
+
+    # สร้าง command สำหรับ docker-compose ps โดยระบุ path ของไฟล์ docker-compose.yml
+    command = f"docker-compose -f {current_path}/docker-compose.yml ps -a"
+    
+    restart_docker = f"docker-compose -f {current_path}/docker-compose.yml restart"
+    
+    # รัน command ที่สร้างขึ้น
+    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    # ตรวจสอบผลลัพธ์
+    if result.returncode == 0:
+        print("Command executed successfully:\n", result.stdout)
+
+        # แยกบรรทัดข้อมูลจากผลลัพธ์
+        lines = result.stdout.splitlines()
+
+        # ตรวจสอบแต่ละบรรทัดที่มีข้อมูล service
+        all_up = True
+        for line in lines[2:]:  # ข้ามสองบรรทัดแรกที่เป็น header
+            if "Up" not in line:  # ถ้า service ไหนไม่ขึ้นว่า Up
+                all_up = False
+                break
+
+        if all_up:
+            print("All services are up.")
+        else:
+            print("Some services are not running normally!")
+            result = subprocess.run(restart_docker, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            
+    else:
+        print("Error executing command:\n", result.stderr)
+   
+    
 # ฟังก์ชัน iperf ใช้ตัวแปร ip_address จากภายนอก
-def iperf():
+def iperf(ip_address, time_test, bandwidth, parallel):
     # คำสั่งหลักสำหรับ iperf
     command = f"docker exec IperfClient iperf3 -c {ip_address} -u -t {time_test} -b {bandwidth} -P {parallel} > iperf.log"
     
@@ -137,7 +194,7 @@ def iperf():
     }
     
 # ฟังก์ชัน getcpu ใช้ mpstat เพื่อเก็บค่า CPU usage
-def getcpu():
+def getcpu(time_test,):
     command = f"docker exec VPNserver bash -c 'for i in {{1..{time_test}}}; do mpstat -P ALL 1 1 | grep \"all\" | awk \"NR==1 {{print \\$12}}\"; done'"
     
     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -154,7 +211,7 @@ def getcpu():
 
 
 # ฟังก์ชัน get_memory_usage เพื่อเก็บค่า RAM usage
-def get_memory_usage():
+def get_memory_usage(time_test,):
     command = f"docker exec VPNserver bash -c 'for i in {{1..{time_test}}}; do free | awk \"/Mem/ {{printf(\\\"%.2f\\\\n\\\", \\$3/\\$2 * 100.0)}}\"; sleep 1; done'"
 
     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

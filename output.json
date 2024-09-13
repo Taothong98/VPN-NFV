@@ -1,21 +1,21 @@
 {
-    "input": {
+    "arguments": {
+        "ip_address": "192.168.100.100",
         "time_test": "1",
-        "bandwidth": "1Gb",
-        "parallel": "1"
+        "bandwidth": "1Gb"
     },
-    "cpu": 39.23,
-    "memory": 19.51,
+    "cpu": 37.9,
+    "memory": 19.06,
     "iperf": {
         "senderInterval": "0.00-1.00",
         "receiverInterval": "0.00-1.00",
-        "senderTransfer": "84.1",
-        "receiverTransfer": "84.1",
-        "senderBitrate": "706",
-        "receiverBitrate": "705",
+        "senderTransfer": "106",
+        "receiverTransfer": "105",
+        "senderBitrate": "890",
+        "receiverBitrate": "879",
         "senderJitter": "0.000",
-        "receiverJitter": "0.017",
-        "senderLostTotal": "0/64492",
-        "receiverLostTotal": "3/64492"
+        "receiverJitter": "0.013",
+        "senderLostTotal": "0/81365",
+        "receiverLostTotal": "981/81365"
     }
 }
