@@ -1,0 +1,38 @@
+{
+    "arguments": {
+        "time_test": "1",
+        "bandwidth": "20Mb",
+        "parallel": "1",
+        "cpu_limit": "0.1",
+        "ram_limit": "1024M",
+        "link_capacity": "10Mbit"
+    },
+    "memory": 18.08,
+    "cpu": 1.5300000000000011,
+    "iperf": {
+        "senderTransfer": "2.38 MB",
+        "receiverTransfer": "2.38 MB",
+        "senderBitrate": "20.0 Mbps",
+        "receiverBitrate": "20.0 Mbps",
+        "senderJitter": "0.000 ms",
+        "receiverJitter": "0.054 ms",
+        "senderLostTotal": "0/1826 packets",
+        "receiverLostTotal": "0/1826 packets"
+    },
+    "collect_data": {
+        "Calculations": {
+            "Encapsulation Size": {
+                "bytes": 77490,
+                "packets": 2
+            },
+            "Data Loss Between Containers": {
+                "bytes": -746,
+                "packets": -7
+            },
+            "Post Decapsulation Loss": {
+                "bytes": 0,
+                "packets": 0
+            }
+        }
+    }
+}

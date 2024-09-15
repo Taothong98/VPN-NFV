@@ -37,7 +37,7 @@ services:
         # reservations:
           # cpus: '1'        
           # memory: '128M'     # กำหนด RAM ที่ container ควรจะมีอย่างน้อย (256 MB)   
-    cpuset: '0'
+    cpuset: '${NUM_core}'
     # image: weejewel/wg-easy
     container_name: VPNserver
     restart: unless-stopped
