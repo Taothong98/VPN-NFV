@@ -19,7 +19,7 @@ RUN ln -sf python3 /usr/bin/python
 
 # COPY dev-wg/performance.py /home
 # RUN chmod +x /home/performance.py
-
+RUN apk add --no-cache stress-ng
 ENV TZ=Asia/Bangkok
 
 # RUN ifconfig eth1 mtu 65535

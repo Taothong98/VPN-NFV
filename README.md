@@ -1,3 +1,63 @@
+################################### XanMod Kernel (xanmod.org) #################################
+
+
+hostnamectl
+
+wget -qO - https://dl.xanmod.org/archive.key | gpg --dearmor -vo /usr/share/keyrings/xanmod-archive-keyring.gpg
+
+echo 'deb [signed-by=/usr/share/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org releases main' | tee /etc/apt/sources.list.d/xanmod-release.list
+
+apt update && apt install linux-xanmod-x64v2
+
+--------------------------------------------------------------------------------------------------
+ตรวจสอบการมีอยู่ของไฟล์ cpu.rt_runtime_us ในระบบ
+
+ls /sys/fs/cgroup/cpu.rt_runtime_us
+/sys/fs/cgroup/cpu.rt_runtime_us
+zcat /proc/config.gz | grep CONFIG_RT_GROUP_SCHED
+
+cat /boot/config-$(uname -r) | grep CONFIG_RT_GROUP_SCHED
+# CONFIG_RT_GROUP_SCHED is not set
+
+hostnamectl
+cat /proc/version
+
+apt update
+apt install git
+
+cd /usr/src/
+mkdir /usr/src/linux-6.9.9/build
+cd /usr/src/linux-6.9.9
+
+wget https://mirrors.edge.kernel.org/pub/linux/kernel/v6.x/linux-6.8.tar.gz
+wget https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.15.tar.
+
+wget https://gitlab.com/xanmod/linux/-/archive/6.6.50-rt42-xanmod1/linux-6.6.50-rt42-xanmod1.tar.gz
+wget -4 https://gitlab.com/xanmod/linux/-/archive/6.6.50-rt42-xanmod1/linux-6.6.50-rt42-xanmod1.tar.gz
+
+
+tar -xzvf linux-6.8.tar.gz
+tar -xzvf linux-5.15.tar.gz
+tar -xzvf linux-6.6.50-rt42-xanmod1.tar.gz
+
+cd linux-6.8/
+cd linux-5.15/
+cd linux-6.6.50-rt42-xanmod1/
+
+
+sudo apt install git build-essential fakeroot libncurses-dev libssl-dev ccache bison flex
+
+make menuconfig
+
+# Go to General setup ─> Control Group Support ─> CPU controller ─> Group scheduling for SCHED_RR/FIFO configuration as shown below: 
+0 33 4 3
+
+# Go to General setup ─> Kernel .config support and enable access to .config through /proc/config.gz
+0 24 25
+
+make -j20
+
+
 ################################### sudoers #################################
 apt install install sudoers
 
@@ -41,6 +101,54 @@ docker-compose --version
 ###################################### install git ####################################
 
 apt install git
+
+git clone https://github.com/Taothong98/VPN-NFV.git
+
+sudo apt install python3
+
+---------------------------- Test cpu ----------------------------------
+
+sudo docker exec -it VPNserver apk add --no-cache stress-ng
+
+sudo docker exec -it VPNserver stress-ng --cpu 1 --timeout 60
+
+docker exec -it IperfServer bash
+htop
+sudo docker exec -it VPNserver htop
+
+docker exec -it VPNserver stress-ng --cpu 0 --cpu-load 70 --timeout 60
+
+
+stdocker exec -it VPNserver ress-ng --vm 1 --vm-bytes 128M --timeout 60
+docker exec -it VPNserver stress-ng --vm 2 --vm-bytes 2G --timeout 60
+
+
+sudo docker stats VPNserver
+
+sudo docker-compose restart
+sudo docker restart VPNserver 
+
+sudo docker-compose up stop
+sudo docker-compose up start
+sudo docker-compose up -d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -95,21 +203,7 @@ docker exec VPNserver tc class add dev wg0 parent 1:0 classid 1:10 htb rate 500M
 docker exec VPNserver tc filter add dev wg0 parent 1:0 prio 0 protocol ip handle 10 fw flowid 1:10
 
 
----------------------------- Test cpu ----------------------------------
-docker exec -it VPNserver stress --cpu 1 --timeout 60
-docker exec -it VPNserver stress-ng --cpu 0 --cpu-load 70 --timeout 60
 
-stdocker exec -it VPNserver ress-ng --vm 1 --vm-bytes 128M --timeout 60
-docker exec -it VPNserver stress-ng --vm 2 --vm-bytes 2G --timeout 60
-
-
-
-docker exec -it VPNserver apk add --no-cache stress-ng
-
-
-docker exec -it VPNserver sh -c "echo 'http://dl-cdn.alpinelinux.org/alpine/edge/community' >> /etc/apk/repositories"
-docker exec -it VPNserver apk update
-docker exec -it VPNserver apk add --no-cache stress
 
 
 ####################### Configure the real-time scheduler ###########################
@@ -166,69 +260,8 @@ sudo apt install linux-image-rt-amd64
 หากคุณต้องการการประมวลผลแบบ Real-Time อย่างชัดเจน การใช้ distribution เช่น Ubuntu Studio หรือ Debian RT ซึ่งมาพร้อมกับเคอร์เนลที่ปรับแต่งสำหรับ Real-Time Processing อาจเป็นทางเลือกที่ดี
 
 #####################################################################################
-ตรวจสอบการมีอยู่ของไฟล์ cpu.rt_runtime_us ในระบบ
-
-ls /sys/fs/cgroup/cpu.rt_runtime_us
-/sys/fs/cgroup/cpu.rt_runtime_us
-zcat /proc/config.gz | grep CONFIG_RT_GROUP_SCHED
-
-#  CONFIG_RT_GROUP_SCHED=y (เปิดใช้งาน)
-#  CONFIG_RT_GROUP_SCHED=n (ปิดใช้งาน)
-
-cat /boot/config-$(uname -r) | grep CONFIG_RT_GROUP_SCHED
-# CONFIG_RT_GROUP_SCHED is not set
-
-hostnamectl
-cat /proc/version
-
-apt update
-apt install git
-
-cd /usr/src/
-mkdir /usr/src/linux-6.9.9/build
-cd /usr/src/linux-6.9.9
-
-wget https://mirrors.edge.kernel.org/pub/linux/kernel/v6.x/linux-6.8.tar.gz
-wget https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.15.tar.
-
-wget https://gitlab.com/xanmod/linux/-/archive/6.6.50-rt42-xanmod1/linux-6.6.50-rt42-xanmod1.tar.gz
-wget -4 https://gitlab.com/xanmod/linux/-/archive/6.6.50-rt42-xanmod1/linux-6.6.50-rt42-xanmod1.tar.gz
 
 
-tar -xzvf linux-6.8.tar.gz
-tar -xzvf linux-5.15.tar.gz
-tar -xzvf linux-6.6.50-rt42-xanmod1.tar.gz
-
-cd linux-6.8/
-cd linux-5.15/
-cd linux-6.6.50-rt42-xanmod1/
 
 
-sudo apt install git build-essential fakeroot libncurses-dev libssl-dev ccache bison flex
 
-make menuconfig
-
-# Go to General setup ─> Control Group Support ─> CPU controller ─> Group scheduling for SCHED_RR/FIFO configuration as shown below: 
-0 33 4 3
-
-# Go to General setup ─> Kernel .config support and enable access to .config through /proc/config.gz
-0 24 25
-
-make -j20
-
-<!-- sudo apt update
-sudo apt install libelf-dev
-sudo apt install libelf1
-
-make -j20 -->
-
-sudo apt install build-essential libncurses-dev bison flex libssl-dev libelf-dev
-
-
-make menuconfig
-# ปิดการตั้งค่า Sign all modules หรือ Require modules to be signed
-
-openssl req -new -x509 -newkey rsa:4096 -keyout certs/signing_key.pem -out certs/signing_key.x509 -days 365 -nodes
-
-UK
-Los Angeles

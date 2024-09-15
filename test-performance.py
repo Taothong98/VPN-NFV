@@ -39,7 +39,6 @@ def main():
     new_ram_limit = args.new_ram_limit
     link_capacity = args.link_capacity
         
-    docker_start()  # ต้องให้ docker_start() ทำงานเสร็จก่อน
     results = {}
     
     if new_cpu_limit:
@@ -49,6 +48,8 @@ def main():
     if new_ram_limit:
         print(f"Setting modified ram to {new_ram_limit}")
         modify_ram_limit(new_ram_limit)      
+        
+    docker_start()  # ต้องให้ docker_start() ทำงานเสร็จก่อน
         
     if link_capacity:
         print(f"Setting link capacity to {link_capacity}")
@@ -91,7 +92,7 @@ def main():
 
     # ====================== เรียก collect_data ก่อน ping ==========================
     collect_data_result = collect_data()  # เรียก collect_data และเก็บผลลัพธ์
-    results["collect_data"] = collect_data_result  # เพิ่มผลลัพธ์ collect_data ลงใน JSON
+    results["Interface_data"] = collect_data_result  # เพิ่มผลลัพธ์ collect_data ลงใน JSON
 
     # ====================== เรียกฟังก์ชัน ping() และบันทึกผลลัพธ์ลง JSON ======================
     # results["ping"] = ping(ip_address)
@@ -242,45 +243,25 @@ def modify_ram_limit(new_ram_limit):
         modify_ram_limit(new_ram_limit)
         
 def set_link_capacity(link_capacity):
-    try:
-        # รันคำสั่งผ่าน subprocess และดึงค่า output
-        result = subprocess.run(["docker", "exec", "VPNserver", "tc", "class", "show", "dev", "wg0"], 
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        show = result.stdout  # เก็บผลลัพธ์ของคำสั่ง
 
-        # ตรวจสอบว่าค่า show มีข้อมูลหรือไม่
-        if not show:
-            print("tc can't not set")
-        else:
-            # ดึงค่าที่อยู่หลังคำว่า 'rate' ออกมา (ในที่นี้คือ 30Mbit)
-            show_parts = show.split()
-            if 'rate' in show_parts:
-                show_rate_index = show_parts.index('rate') + 1  # หา index ที่คำว่า 'rate' แล้วบวก 1 เพื่อเอาค่าหลัง 'rate'
-                show_rate = show_parts[show_rate_index]  # ดึงค่าหลัง 'rate' (เช่น 30Mbit)
-                
-                # เปรียบเทียบกับค่า lc ที่ส่งเข้ามา
-                if show_rate != link_capacity:
-                    print(f"lc not same, auto change rate to {link_capacity}")
-                    # เปลี่ยนค่า rate โดยใช้คำสั่ง docker exec
-                    change_result = subprocess.run(
-                        ["docker", "exec", "VPNserver", "tc", "class", "change", "dev", "wg0", 
-                         "classid", "1:10", "htb", "rate", link_capacity],
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-                    )
-
-                    # ตรวจสอบผลลัพธ์หลังจากเปลี่ยนค่า
-                    if change_result.returncode == 0:
-                        print("Auto change success, Check again..")
-                        # ตรวจสอบอีกครั้งหลังจากเปลี่ยนค่า
-                        set_link_capacity(link_capacity)
-                    else:
-                        print(f"can't change lc: {change_result.stderr}")
-                else:
-                    print("lc is same, you can test it ")
-            else:
-                print("nodata")  # ถ้าไม่มีคำว่า 'rate' ในผลลัพธ์
-    except Exception as e:
-        print(f"Error lc function: {e}")
+    # สร้าง command สำหรับ docker-compose ps โดยระบุ path ของไฟล์ docker-compose.yml
+    show_int = f"docker exec VPNserver tc class show dev wg0"    
+    add_htb = f"docker exec VPNserver tc qdisc add dev wg0 root handle 1:0 htb default 10"
+    add_classid = f"docker exec VPNserver tc class add dev wg0 parent 1:0 classid 1:10 htb rate {link_capacity} prio 0"
+    iptables = f"docker exec VPNserver iptables -A OUTPUT -t mangle -p udp -j MARK --set-mark 10"
+    tc_filter = f"docker exec VPNserver tc filter add dev wg0 parent 1:0 prio 0 protocol ip handle 10 fw flowid 1:10"
+    
+    # รัน command ที่สร้างขึ้น โดยไม่แสดงผลลัพธ์
+    run_add_htb = subprocess.run(add_htb, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    run_add_classid = subprocess.run(add_classid, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    run_iptables = subprocess.run(iptables, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    run_tc_filter = subprocess.run(tc_filter, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    
+    # รันคำสั่งและแสดงผลลัพธ์ออกมาทาง terminal
+    run_show_int = subprocess.run(show_int, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print(run_show_int.stdout)  # แสดงผลลัพธ์ทาง stdout
+    if run_show_int.stderr:  # ตรวจสอบและแสดงผลลัพธ์ error (ถ้ามี)
+        print(f"Error: {run_show_int.stderr}")
         
     
 def docker_start():
@@ -288,58 +269,52 @@ def docker_start():
     current_path = os.getcwd()
 
     # สร้าง command สำหรับ docker-compose ps โดยระบุ path ของไฟล์ docker-compose.yml
-    command = f"docker-compose -f {current_path}/docker-compose.yml ps -a"    
-    restart_compose = f"docker-compose -f {current_path}/docker-compose.yml restart"
-    restart_VPNserver = f"docker restart VPNserver "
-    restart_IperfClient = f"docker restart IperfClient "
-    restart_IperfServer = f"docker restart IperfServer "
-    
- 
-    
-    
-    # รัน command ที่สร้างขึ้น โดยไม่แสดงผลลัพธ์
+    command = f"docker-compose -f {current_path}/docker-compose.yml ps -a"
+    compose_restart = f"docker-compose -f {current_path}/docker-compose.yml restart"
+    compose_stop = f"docker-compose -f {current_path}/docker-compose.yml stop"
+    compose_rm = f"docker-compose -f {current_path}/docker-compose.yml rm -f"
+    compose_up = f"docker-compose -f {current_path}/docker-compose.yml up -d"
+
+    # รัน command ที่สร้างขึ้น
     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    run_restart_compose = subprocess.run(restart_compose, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    run_restart_VPNserver = subprocess.run(restart_VPNserver, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    run_restart_IperfClient = subprocess.run(restart_IperfClient, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    run_restart_IperfServer = subprocess.run(restart_IperfServer, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # run_compose_restart = subprocess.run(compose_restart, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    run_compose_stop = subprocess.run(compose_stop, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print(run_compose_stop.stdout)  # แสดงผลลัพธ์ทาง stdout
     
+    run_compose_rm = subprocess.run(compose_rm, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print(run_compose_rm.stdout)  # แสดงผลลัพธ์ทาง stdout
     
-    # ตรวจสอบผลลัพธ์ (ไม่แสดงผลลัพธ์ออกทาง console)
-    if result.returncode == 0:
-        # แยกบรรทัดข้อมูลจากผลลัพธ์
-        lines = result.stdout.splitlines()
-
-        # ตรวจสอบว่ามี service หรือไม่
-        if len(lines) <= 2:  # มีเพียง header แต่ไม่มี service
-            result = subprocess.run(restart_compose, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            
-        else:
-            # ตรวจสอบแต่ละบรรทัดที่มีข้อมูล service
-            all_up = True
-            for line in lines[2:]:  # ข้ามสองบรรทัดแรกที่เป็น header
-                if "Up" not in line or "Exited" in line:  # ถ้า service ไหนไม่ขึ้นว่า Up หรือขึ้นว่า Exited
-                    all_up = False
-                    break
-
-            if not all_up:
-                # รีสตาร์ท docker services หากมี service ที่ไม่ทำงานปกติ
-                subprocess.run(restart_compose, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            
-    else:
-        # เก็บ error ไว้ แต่ไม่แสดงผล
-        pass
-
+    run_compose_up = subprocess.run(compose_up, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print(run_compose_up.stdout)  # แสดงผลลัพธ์ทาง stdout
+    print('docker-compose up')  # แสดงผลลัพธ์ทาง stdout
+    
+    # print(result.stdout)  # แสดงผลลัพธ์ทาง stdout
+    # print(run_compose_restart.stdout)  # แสดงผลลัพธ์ทาง stdout
+    
+    # if run_show_int.stderr:  # ตรวจสอบและแสดงผลลัพธ์ error (ถ้ามี)
+    #     print(f"Error: {run_show_int.stderr}")
    
     
 # ฟังก์ชัน iperf ใช้ตัวแปร ip_address จากภายนอก
 def iperf(ip_address, time_test, bandwidth, parallel):
+    print('iperf_test_start') 
+    # เริ่มจับเวลา
+    start_time = time.time()
+
     # คำสั่งหลักสำหรับ iperf
     command = f"docker exec IperfClient iperf3 -c {ip_address} -u -t {time_test} -b {bandwidth} -P {parallel} > iperf.log"
     
     # รันคำสั่ง iperf และรอให้เสร็จสิ้น
     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     
+    # สิ้นสุดการจับเวลา
+    end_time = time.time()
+    print('iperf_test_end') 
+    
+
+    # คำนวณเวลาที่ใช้ (response time)
+    response_time = end_time - start_time
+
     if result.returncode != 0:
         return {"error": result.stderr}  # คืนค่าข้อผิดพลาดถ้าเกิดปัญหา
 
@@ -382,7 +357,8 @@ def iperf(ip_address, time_test, bandwidth, parallel):
         "senderJitter": f"{result7.stdout.strip()} ms",            # เพิ่มหน่วยเป็น "ms"
         "receiverJitter": f"{result8.stdout.strip()} ms",          # เพิ่มหน่วยเป็น "ms"
         "senderLostTotal": f"{result9.stdout.strip()} packets",    # เพิ่มหน่วยเป็น "packets"
-        "receiverLostTotal": f"{result10.stdout.strip()} packets"  # เพิ่มหน่วยเป็น "packets"
+        "receiverLostTotal": f"{result10.stdout.strip()} packets", # เพิ่มหน่วยเป็น "packets"
+        "response_time": f"{response_time:.2f} seconds"            # เพิ่ม response time ที่จับได้
     }
     
     
@@ -407,6 +383,8 @@ def append_to_json(filename, new_data):
     
 # ฟังก์ชัน getcpu ใช้ mpstat เพื่อเก็บค่า CPU usage
 def getcpu(time_test,):
+    print('get_cpu_usage') 
+    
     command = f"docker exec VPNserver bash -c 'for i in {{1..{time_test}}}; do mpstat -P ALL 1 1 | grep \"all\" | awk \"NR==1 {{print \\$12}}\"; done'"
     
     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -424,6 +402,8 @@ def getcpu(time_test,):
 
 # ฟังก์ชัน get_memory_usage เพื่อเก็บค่า RAM usage
 def get_memory_usage(time_test,):
+    print('get_memory_usage') 
+    
     command = f"docker exec VPNserver bash -c 'for i in {{1..{time_test}}}; do free | awk \"/Mem/ {{printf(\\\"%.2f\\\\n\\\", \\$3/\\$2 * 100.0)}}\"; sleep 1; done'"
 
     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -439,27 +419,27 @@ def get_memory_usage(time_test,):
     return avg_ram_usage
 
 
-def ping(ip_address):
-    command = f"docker exec IperfClient ping {ip_address} -c 5"
+# def ping(ip_address):
+#     command = f"docker exec IperfClient ping {ip_address} -c 5"
 
-    # รันคำสั่ง ping
-    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+#     # รันคำสั่ง ping
+#     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    # แปลงผลลัพธ์เป็น string
-    output = result.stdout.decode('utf-8')
+#     # แปลงผลลัพธ์เป็น string
+#     output = result.stdout.decode('utf-8')
 
-    # ใช้ regular expression เพื่อดึงค่า max round-trip time
-    match = re.search(r"min/avg/max = (\d+\.\d+)/(\d+\.\d+)/(\d+\.\d+)", output)
+#     # ใช้ regular expression เพื่อดึงค่า max round-trip time
+#     match = re.search(r"min/avg/max = (\d+\.\d+)/(\d+\.\d+)/(\d+\.\d+)", output)
 
-    if match:
-        min_val, avg_val, max_val = match.groups()
-        # print(f"Max round-trip time: {max_val} ms")
-        # return {"min": min_val, "avg": avg_val, "max": max_val}
-        return {"max": max_val}
+#     if match:
+#         min_val, avg_val, max_val = match.groups()
+#         # print(f"Max round-trip time: {max_val} ms")
+#         # return {"min": min_val, "avg": avg_val, "max": max_val}
+#         return {"max": max_val}
     
-    else:
-        print("ไม่พบข้อมูล round-trip min/avg/max")
-        return {"error": "ไม่พบข้อมูล ping"}
+#     else:
+#         print("ไม่พบข้อมูล round-trip min/avg/max")
+#         return {"error": "ไม่พบข้อมูล ping"}
 
 # =========================================================================================
 
@@ -479,6 +459,7 @@ def parse_net_dev_output(output, interface, direction):
     return 0, 0
 
 def collect_data():
+    print('get_int_data') 
     # รันคำสั่งจากแต่ละ container
     iperfclient_output = run_docker_command('IperfClient')
     vpnserver_output = run_docker_command('VPNserver')
@@ -506,32 +487,32 @@ def collect_data():
 
     # สร้าง dictionary เพื่อเก็บผลลัพธ์
     results = {
-        # "IperfClient": {
-        #     "wg0": {"bytes": iperfclient_wg0_bytes, "packets": iperfclient_wg0_packets},
-        #     "eth0": {"bytes": iperfclient_eth0_bytes, "packets": iperfclient_eth0_packets}
-        # },
-        # "VPNserver": {
-        #     "eth1": {"bytes": vpnserver_eth1_bytes, "packets": vpnserver_eth1_packets},
-        #     "wg0": {"bytes": vpnserver_wg0_bytes, "packets": vpnserver_wg0_packets},
-        #     "eth0": {"bytes": vpnserver_eth0_bytes, "packets": vpnserver_eth0_packets}
-        # },
-        # "IperfServer": {
-        #     "eth0": {"bytes": iperfserver_eth0_bytes, "packets": iperfserver_eth0_packets}
-        # },
-        "Calculations": {
-            "Encapsulation Size": {
-                "bytes": encapsulation_size_bytes,
-                "packets": encapsulation_size_packets
-            },
-            "Data Loss Between Containers": {
-                "bytes": data_loss_between_containers_bytes,
-                "packets": data_loss_between_containers_packets
-            },
-            "Post Decapsulation Loss": {
-                "bytes": post_decapsulation_loss_bytes,
-                "packets": post_decapsulation_loss_packets
-            }
-        }
+        "IperfClient": {
+            "wg0": {"bytes": iperfclient_wg0_bytes, "packets": iperfclient_wg0_packets},
+            "eth0": {"bytes": iperfclient_eth0_bytes, "packets": iperfclient_eth0_packets}
+        },
+        "VPNserver": {
+            "eth1": {"bytes": vpnserver_eth1_bytes, "packets": vpnserver_eth1_packets},
+            "wg0": {"bytes": vpnserver_wg0_bytes, "packets": vpnserver_wg0_packets},
+            "eth0": {"bytes": vpnserver_eth0_bytes, "packets": vpnserver_eth0_packets}
+        },
+        "IperfServer": {
+            "eth0": {"bytes": iperfserver_eth0_bytes, "packets": iperfserver_eth0_packets}
+        },
+    #     "Calculations": {
+    #         "Encapsulation Size": {
+    #             "bytes": encapsulation_size_bytes,
+    #             "packets": encapsulation_size_packets
+    #         },
+    #         "Data Loss Between Containers": {
+    #             "bytes": data_loss_between_containers_bytes,
+    #             "packets": data_loss_between_containers_packets
+    #         },
+    #         "Post Decapsulation Loss": {
+    #             "bytes": post_decapsulation_loss_bytes,
+    #             "packets": post_decapsulation_loss_packets
+    #         }
+    #     }
     }
 
     return results
