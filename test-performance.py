@@ -74,21 +74,33 @@ def main():
 
     def run_getmem():
         results["memory"] = get_memory_usage(time_test)
+        
+    def run_ping():
+        results["ping"] = ping(ip_address,time_test)       
 
     # สร้าง threads สำหรับ iperf, getcpu, และ get_memory_usage
     iperf_thread = threading.Thread(target=run_iperf)
     getcpu_thread = threading.Thread(target=run_getcpu)
     getmem_thread = threading.Thread(target=run_getmem)
+    ping_thread = threading.Thread(target=run_ping)
+    
 
     # เรียกใช้ทั้งสามฟังก์ชันพร้อมกัน
     iperf_thread.start()
     getcpu_thread.start()
     getmem_thread.start()
+    ping_thread.start()
+    
 
     # รอให้ทั้งสามฟังก์ชันเสร็จสิ้นการทำงาน
     iperf_thread.join()
     getcpu_thread.join()
     getmem_thread.join()
+    ping_thread.join()
+    
+    
+    
+    
 
     # ====================== เรียก collect_data ก่อน ping ==========================
     collect_data_result = collect_data()  # เรียก collect_data และเก็บผลลัพธ์
@@ -126,6 +138,14 @@ def main():
         
         print("Appended results to output_cpu_100.json when CPU is 100")
 
+
+
+    # iperf_thread.stop()
+    # getcpu_thread.stop()
+    # getmem_thread.stop()
+    # ping_thread.stop()
+    
+    
     # หยุดการทำงานของ timer_thread เมื่อ main ทำงานเสร็จ
     stop_event.set()
 
@@ -134,6 +154,7 @@ def main():
     
     # หยุดการทำงานของ timer_thread เมื่อ main ทำงานเสร็จ
     stop_event.set()
+    
 
     # รอให้ thread หยุดทำงาน
     timer.join() 
@@ -419,27 +440,27 @@ def get_memory_usage(time_test,):
     return avg_ram_usage
 
 
-# def ping(ip_address):
-#     command = f"docker exec IperfClient ping {ip_address} -c 5"
+def ping(ip_address,time_test):
+    command = f"docker exec IperfClient ping {ip_address} -c {time_test}"
 
-#     # รันคำสั่ง ping
-#     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # รันคำสั่ง ping
+    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-#     # แปลงผลลัพธ์เป็น string
-#     output = result.stdout.decode('utf-8')
+    # แปลงผลลัพธ์เป็น string
+    output = result.stdout.decode('utf-8')
 
-#     # ใช้ regular expression เพื่อดึงค่า max round-trip time
-#     match = re.search(r"min/avg/max = (\d+\.\d+)/(\d+\.\d+)/(\d+\.\d+)", output)
+    # ใช้ regular expression เพื่อดึงค่า max round-trip time
+    match = re.search(r"min/avg/max = (\d+\.\d+)/(\d+\.\d+)/(\d+\.\d+)", output)
 
-#     if match:
-#         min_val, avg_val, max_val = match.groups()
-#         # print(f"Max round-trip time: {max_val} ms")
-#         # return {"min": min_val, "avg": avg_val, "max": max_val}
-#         return {"max": max_val}
+    if match:
+        min_val, avg_val, max_val = match.groups()
+        # print(f"Max round-trip time: {max_val} ms")
+        # return {"min": min_val, "avg": avg_val, "max": max_val}
+        return {"max": max_val}
     
-#     else:
-#         print("ไม่พบข้อมูล round-trip min/avg/max")
-#         return {"error": "ไม่พบข้อมูล ping"}
+    else:
+        print("ไม่พบข้อมูล round-trip min/avg/max")
+        return {"error": "ไม่พบข้อมูล ping"}
 
 # =========================================================================================
 
